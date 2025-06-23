@@ -2,10 +2,19 @@ package handlers
 
 import (
 	"challenge-v3/models"
+	"challenge-v3/storage"
 	"encoding/json"
 	"log"
 	"net/http"
 )
+
+type API struct {
+	db storage.Storage
+}
+
+func NewAPI(db storage.Storage) *API {
+	return &API{db: db}
+}
 
 func SendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -19,7 +28,7 @@ func SendJSONSuccess(w http.ResponseWriter, message string, statusCode int) {
 	json.NewEncoder(w).Encode(map[string]string{"message": message})
 }
 
-func HandleGyroscope(w http.ResponseWriter, r *http.Request) {
+func (a *API) HandleGyroscope(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		SendJSONError(w, "Método não permitido. Use POST.", http.StatusMethodNotAllowed)
 		return
@@ -41,10 +50,17 @@ func HandleGyroscope(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SendJSONSuccess(w, "Dados de giroscópio recebidos com sucesso!", http.StatusOK)
+	if err := a.db.SaveGyroscope(&data); err != nil {
+		log.Printf("ERRO: Falha ao salvar dados de giroscópio: %v", err)
+		SendJSONError(w, "Erro interno ao salvar os dados", http.StatusInternalServerError)
+		return
+	}
+
+	SendJSONSuccess(w, "Dados de giroscópio recebidos e salvos com sucesso!", http.StatusOK)
+
 }
 
-func HandleGPS(w http.ResponseWriter, r *http.Request) {
+func (a *API) HandleGPS(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		SendJSONError(w, "Método não permitido. Use POST.", http.StatusMethodNotAllowed)
 		return
@@ -66,10 +82,15 @@ func HandleGPS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SendJSONSuccess(w, "Dados de GPS recebidos com sucesso!", http.StatusOK)
+	if err := a.db.SaveGPS(&data); err != nil {
+		log.Printf("ERRO: Falha ao salvar dados de GPS: %v", err)
+		SendJSONError(w, "Erro interno ao salvar os dados", http.StatusInternalServerError)
+		return
+	}
+	SendJSONSuccess(w, "Dados de GPS recebidos e salvos com sucesso!", http.StatusOK)
 }
 
-func HandlePhoto(w http.ResponseWriter, r *http.Request) {
+func (a *API) HandlePhoto(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		SendJSONError(w, "Método não permitido. Use POST.", http.StatusMethodNotAllowed)
 		return
@@ -91,5 +112,10 @@ func HandlePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SendJSONSuccess(w, "Foto recebida com sucesso!", http.StatusOK)
+	if err := a.db.SavePhoto(&data); err != nil {
+		log.Printf("ERRO: Falha ao salvar dados de foto: %v", err)
+		SendJSONError(w, "Erro interno ao salvar os dados", http.StatusInternalServerError)
+		return
+	}
+	SendJSONSuccess(w, "Foto recebida e salva com sucesso!", http.StatusOK)
 }
