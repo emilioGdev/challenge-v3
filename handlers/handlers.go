@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/nats-io/nats.go"
 )
@@ -29,6 +30,27 @@ func SendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(models.ErrorResponse{Message: message})
+}
+
+func AuthenticationMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expectedApiKey := os.Getenv("API_KEY")
+		if expectedApiKey == "" {
+			slog.Error("API_KEY não está configurada no ambiente do servidor")
+			SendJSONError(w, "Erro de configuração interna", http.StatusInternalServerError)
+			return
+		}
+
+		receivedApiKey := r.Header.Get("X-API-Key")
+
+		if receivedApiKey != expectedApiKey {
+			slog.Warn("tentativa de acesso não autorizado", "remote_addr", r.RemoteAddr)
+			SendJSONError(w, "Acesso não autorizado", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (a *API) RegisterRoutes(mux *http.ServeMux) {

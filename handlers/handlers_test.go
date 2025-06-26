@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -30,9 +32,48 @@ func (m *MockNATSJetStream) Publish(subj string, data []byte, opts ...nats.PubOp
 
 func float64Ptr(f float64) *float64 { return &f }
 
+func TestAuthenticationMiddleware(t *testing.T) {
+	err := godotenv.Load("../.env")
+	require.NoError(t, err, "Falha ao carregar .env para o teste de middleware")
+
+	apiKey := os.Getenv("API_KEY")
+	require.NotEmpty(t, apiKey, "API_KEY não pode ser vazia no .env")
+
+	dummyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Acesso Permitido"))
+	})
+
+	protectedHandler := AuthenticationMiddleware(dummyHandler)
+
+	t.Run("falha - sem chave de api", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rr := httptest.NewRecorder()
+		protectedHandler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code, "Deveria retornar 401 sem a chave")
+	})
+
+	t.Run("falha - com chave de api errada", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-API-Key", "chave-errada-123")
+		rr := httptest.NewRecorder()
+		protectedHandler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code, "Deveria retornar 401 com a chave errada")
+	})
+
+	t.Run("sucesso - com chave de api correta", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-API-Key", apiKey)
+		rr := httptest.NewRecorder()
+		protectedHandler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code, "Deveria retornar 200 com a chave correta")
+	})
+}
+
 func TestHandleGyroscope_Async(t *testing.T) {
 	mockJS := new(MockNATSJetStream)
 	api := NewAPI(nil, nil, mockJS)
+	apiKey := os.Getenv("API_KEY")
 
 	testData := models.GyroscopeData{
 		DeviceID:  "gyro-test-async",
@@ -46,6 +87,7 @@ func TestHandleGyroscope_Async(t *testing.T) {
 	mockJS.On("Publish", "telemetry.gyroscope", payloadBytes).Return(&nats.PubAck{}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/telemetry/gyroscope", bytes.NewBuffer(payloadBytes))
+	req.Header.Set("X-API-Key", apiKey)
 	rr := httptest.NewRecorder()
 	api.HandleGyroscope(rr, req)
 
@@ -56,6 +98,7 @@ func TestHandleGyroscope_Async(t *testing.T) {
 func TestHandleGPS_Async(t *testing.T) {
 	mockJS := new(MockNATSJetStream)
 	api := NewAPI(nil, nil, mockJS)
+	apiKey := os.Getenv("API_KEY")
 
 	testData := models.GPSData{
 		DeviceID:  "gps-test-async",
@@ -68,6 +111,7 @@ func TestHandleGPS_Async(t *testing.T) {
 	mockJS.On("Publish", "telemetry.gps", payloadBytes).Return(&nats.PubAck{}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/telemetry/gps", bytes.NewBuffer(payloadBytes))
+	req.Header.Set("X-API-Key", apiKey)
 	rr := httptest.NewRecorder()
 	api.HandleGPS(rr, req)
 
@@ -76,6 +120,7 @@ func TestHandleGPS_Async(t *testing.T) {
 }
 
 func TestHandlePhoto_Async(t *testing.T) {
+	apiKey := os.Getenv("API_KEY")
 
 	t.Run("sucesso - publica mensagem na fila", func(t *testing.T) {
 		mockJS := new(MockNATSJetStream)
@@ -101,6 +146,7 @@ func TestHandlePhoto_Async(t *testing.T) {
 		mockJS.On("Publish", "telemetry.photo", expectedMessageBytes).Return(&nats.PubAck{}, nil)
 
 		req := httptest.NewRequest(http.MethodPost, "/telemetry/photo", bytes.NewBuffer(requestPayloadBytes))
+		req.Header.Set("X-API-Key", apiKey)
 		rr := httptest.NewRecorder()
 		api.HandlePhoto(rr, req)
 
@@ -117,6 +163,7 @@ func TestHandlePhoto_Async(t *testing.T) {
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodPost, "/telemetry/photo", bytes.NewBuffer(payloadBytes))
+		req.Header.Set("X-API-Key", apiKey)
 		rr := httptest.NewRecorder()
 		api.HandlePhoto(rr, req)
 

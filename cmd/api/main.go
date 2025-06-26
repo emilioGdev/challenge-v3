@@ -44,9 +44,9 @@ func main() {
 
 	router := http.NewServeMux()
 
-	router.Handle("/telemetry/gyroscope", metrics.PrometheusMiddleware(http.HandlerFunc(api.HandleGyroscope)))
-	router.Handle("/telemetry/gps", metrics.PrometheusMiddleware(http.HandlerFunc(api.HandleGPS)))
-	router.Handle("/telemetry/photo", metrics.PrometheusMiddleware(http.HandlerFunc(api.HandlePhoto)))
+	router.Handle("/telemetry/gyroscope", handlers.AuthenticationMiddleware(metrics.PrometheusMiddleware(http.HandlerFunc(api.HandleGyroscope))))
+	router.Handle("/telemetry/gps", handlers.AuthenticationMiddleware(metrics.PrometheusMiddleware(http.HandlerFunc(api.HandleGPS))))
+	router.Handle("/telemetry/photo", handlers.AuthenticationMiddleware(metrics.PrometheusMiddleware(http.HandlerFunc(api.HandlePhoto))))
 
 	router.HandleFunc("/swagger/", httpSwagger.Handler(
 		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
