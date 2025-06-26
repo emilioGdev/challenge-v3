@@ -1,7 +1,7 @@
 package main
 
 import (
-	_ "challenge-v3/docs"
+	_ "challenge-v3/docs" // Import para o Swagger
 	"challenge-v3/handlers"
 	"challenge-v3/messaging"
 	"challenge-v3/metrics"
@@ -28,17 +28,22 @@ func main() {
 		log.Fatalf("ERRO: Falha ao conectar ao NATS: %v", err)
 	}
 	defer nc.Close()
+
 	js, err := messaging.SetupJetStream(nc)
 	if err != nil {
 		log.Fatalf("ERRO: Falha ao configurar o JetStream: %v", err)
 	}
 
+	// A API só precisa da dependência do NATS para publicar mensagens.
+	// As outras dependências (DB, Rekognition) são usadas apenas pelo Worker.
 	api := handlers.NewAPI(nil, nil, js)
 
 	router := http.NewServeMux()
+
 	router.Handle("/telemetry/gyroscope", metrics.PrometheusMiddleware(http.HandlerFunc(api.HandleGyroscope)))
 	router.Handle("/telemetry/gps", metrics.PrometheusMiddleware(http.HandlerFunc(api.HandleGPS)))
 	router.Handle("/telemetry/photo", metrics.PrometheusMiddleware(http.HandlerFunc(api.HandlePhoto)))
+
 	router.HandleFunc("/swagger/", httpSwagger.Handler(
 		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
 	))

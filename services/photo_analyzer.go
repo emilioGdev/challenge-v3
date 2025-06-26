@@ -20,12 +20,10 @@ import (
 type PhotoAnalyzer interface {
 	AnalyzeAndSavePhoto(data *models.PhotoData) (bool, error)
 }
-
 type RekognitionClient interface {
 	SearchFacesByImage(ctx context.Context, params *rekognition.SearchFacesByImageInput, optFns ...func(*rekognition.Options)) (*rekognition.SearchFacesByImageOutput, error)
 	IndexFaces(ctx context.Context, params *rekognition.IndexFacesInput, optFns ...func(*rekognition.Options)) (*rekognition.IndexFacesOutput, error)
 }
-
 type PhotoAnalyzerService struct {
 	rekognitionClient RekognitionClient
 	collectionID      string
@@ -55,6 +53,7 @@ func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool
 	}
 
 	cacheKey := fmt.Sprintf("%x", sha256.Sum256(imageBytes))
+	log.Printf("DEBUG: Chave de cache gerada para a imagem: %s", cacheKey)
 
 	if recognized, found := s.cache.Get(cacheKey); found {
 		log.Printf("CACHE HIT: Imagem encontrada no cache. Reconhecida: %t\n", recognized.(bool))
@@ -64,6 +63,7 @@ func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool
 		}
 		return data.Recognized, nil
 	}
+
 	log.Println("CACHE MISS: Imagem não encontrada no cache. Prosseguindo para análise no Rekognition.")
 
 	var recognized bool
@@ -98,10 +98,12 @@ func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool
 		}
 	}
 
-	log.Printf("Atualizando cache para a chave %s. Reconhecida: %t\n", cacheKey, recognized)
-	s.cache.Set(cacheKey, recognized, cache.DefaultExpiration)
-	data.Recognized = recognized
+	if recognized {
+		log.Printf("CACHE SET: Salvando resultado 'true' no cache para a chave %s\n", cacheKey)
+		s.cache.Set(cacheKey, true, cache.DefaultExpiration)
+	}
 
+	data.Recognized = recognized
 	if err := s.db.SavePhoto(data); err != nil {
 		return false, err
 	}
