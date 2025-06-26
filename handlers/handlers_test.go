@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/rekognition"
+	"github.com/aws/aws-sdk-go-v2/service/rekognition/types"
 	"github.com/joho/godotenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +47,15 @@ func setupTestAPI(t *testing.T) (*API, *sql.DB) {
 	rekognitionClient := rekognition.NewFromConfig(cfg)
 	collectionID := os.Getenv("REKOGNITION_COLLECTION_ID")
 	require.NotEmpty(t, collectionID, "REKOGNITION_COLLECTION_ID não pode ser vazio para os testes")
+
+	_, err = rekognitionClient.CreateCollection(context.TODO(), &rekognition.CreateCollectionInput{CollectionId: &collectionID})
+	var resourceExistsErr *types.ResourceAlreadyExistsException
+	if err != nil {
+		if !errors.As(err, &resourceExistsErr) {
+			require.NoError(t, err, "Falha ao criar coleção de teste no Rekognition")
+		}
+	}
+
 	photoAnalyzer := services.NewPhotoAnalyzerService(rekognitionClient, collectionID, dbStorage)
 	return NewAPI(dbStorage, photoAnalyzer), db
 }
