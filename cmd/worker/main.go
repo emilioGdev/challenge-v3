@@ -149,11 +149,22 @@ func main() {
 		photoAnalyzer: photoAnalyzer,
 	}
 
-	durableName, ackWait := nats.Durable("WORKER"), nats.AckWait(30*time.Second)
-	js.Subscribe("telemetry.gyroscope", worker.handleGyroscopeMsg, durableName)
-	js.Subscribe("telemetry.gps", worker.handleGpsMsg, durableName)
-	js.Subscribe("telemetry.photo", worker.handlePhotoMsg, durableName, ackWait)
+	ackWait30s := nats.AckWait(30 * time.Second)
 
+	_, err = js.Subscribe("telemetry.gyroscope", worker.handleGyroscopeMsg, nats.Durable("GYROSCOPE_WORKER"))
+	if err != nil {
+		log.Fatalf("Falha ao se inscrever no tópico de giroscópio: %v", err)
+	}
+
+	_, err = js.Subscribe("telemetry.gps", worker.handleGpsMsg, nats.Durable("GPS_WORKER"))
+	if err != nil {
+		log.Fatalf("Falha ao se inscrever no tópico de GPS: %v", err)
+	}
+
+	_, err = js.Subscribe("telemetry.photo", worker.handlePhotoMsg, nats.Durable("PHOTO_WORKER"), ackWait30s)
+	if err != nil {
+		log.Fatalf("Falha ao se inscrever no tópico de fotos: %v", err)
+	}
 	log.Println("Worker está no ar, esperando por todas as mensagens de telemetria...")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
