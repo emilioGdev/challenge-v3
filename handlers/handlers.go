@@ -31,8 +31,23 @@ func SendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	json.NewEncoder(w).Encode(models.ErrorResponse{Message: message})
 }
 
-// --- Handlers Assíncronos (Versão Nível 5) ---
+func (a *API) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/telemetry/gyroscope", a.HandleGyroscope)
+	mux.HandleFunc("/telemetry/gps", a.HandleGPS)
+	mux.HandleFunc("/telemetry/photo", a.HandlePhoto)
+}
 
+// HandleGyroscope recebe e enfileira uma telemetria de giroscópio
+// @Summary      Enfileira dados de telemetria de giroscópio
+// @Description  Recebe um payload JSON com os dados do giroscópio, valida, e publica em uma fila NATS para processamento assíncrono.
+// @Tags         Telemetry
+// @Accept       json
+// @Produce      json
+// @Param        gyroscope   body      models.GyroscopeData  true  "Dados do Giroscópio"
+// @Success      202  {object}  map[string]string
+// @Failure      400  {object}  models.ErrorResponse
+// @Failure      500  {object}  models.ErrorResponse
+// @Router       /telemetry/gyroscope [post]
 func (a *API) HandleGyroscope(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		SendJSONError(w, "Método não permitido. Use POST.", http.StatusMethodNotAllowed)
@@ -66,6 +81,17 @@ func (a *API) HandleGyroscope(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Dados de giroscópio recebidos e enfileirados."})
 }
 
+// HandleGPS recebe e enfileira uma telemetria de GPS
+// @Summary      Enfileira dados de telemetria de GPS
+// @Description  Recebe um payload JSON com os dados de GPS, valida, e publica em uma fila NATS para processamento assíncrono.
+// @Tags         Telemetry
+// @Accept       json
+// @Produce      json
+// @Param        gps   body      models.GPSData  true  "Dados de GPS"
+// @Success      202  {object}  map[string]string
+// @Failure      400  {object}  models.ErrorResponse
+// @Failure      500  {object}  models.ErrorResponse
+// @Router       /telemetry/gps [post]
 func (a *API) HandleGPS(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		SendJSONError(w, "Método não permitido. Use POST.", http.StatusMethodNotAllowed)
@@ -99,23 +125,40 @@ func (a *API) HandleGPS(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Dados de GPS recebidos e enfileirados."})
 }
 
+// HandlePhoto recebe e enfileira uma telemetria de foto
+// @Summary      Enfileira dados de telemetria de foto
+// @Description  Recebe um payload JSON com os dados da foto, valida, e publica em uma fila NATS para processamento assíncrono.
+// @Tags         Telemetry
+// @Accept       json
+// @Produce      json
+// @Param        photo   body      models.PhotoRequest  true  "Dados da Foto a serem enviados"
+// @Success      202  {object}  map[string]string
+// @Failure      400  {object}  models.ErrorResponse
+// @Failure      500  {object}  models.ErrorResponse
+// @Router       /telemetry/photo [post]
 func (a *API) HandlePhoto(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		SendJSONError(w, "Método não permitido. Use POST.", http.StatusMethodNotAllowed)
 		return
 	}
-	var data models.PhotoData
-	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+	var requestData models.PhotoRequest
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		SendJSONError(w, "Corpo da requisição inválido", http.StatusBadRequest)
 		return
 	}
 
-	if err := data.Validate(); err != nil {
+	dataToPublish := models.PhotoData{
+		DeviceID:  requestData.DeviceID,
+		Photo:     requestData.Photo,
+		Timestamp: requestData.Timestamp,
+	}
+
+	if err := dataToPublish.Validate(); err != nil {
 		SendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	msgData, err := json.Marshal(data)
+	msgData, err := json.Marshal(dataToPublish)
 	if err != nil {
 		SendJSONError(w, "Erro interno ao preparar a mensagem", http.StatusInternalServerError)
 		return
@@ -128,7 +171,7 @@ func (a *API) HandlePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Mensagem para device %s publicada em 'telemetry.photo'", data.DeviceID)
+	log.Printf("Mensagem para device %s publicada em 'telemetry.photo'", dataToPublish.DeviceID)
 
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Dados da foto recebidos e enfileirados para processamento."})

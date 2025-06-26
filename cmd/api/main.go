@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "challenge-v3/docs"
 	"challenge-v3/handlers"
 	"challenge-v3/messaging"
 	"challenge-v3/services"
@@ -12,6 +13,8 @@ import (
 	"net/http"
 	"os"
 
+	httpSwagger "github.com/swaggo/http-swagger"
+
 	"github.com/joho/godotenv"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -19,6 +22,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rekognition/types"
 )
 
+// @title           API de Telemetria de Frota
+// @version         1.0
+// @description     Esta é a API para ingestão de dados de telemetria do Desafio Cloud.
+// @contact.name   API Support
+// @contact.email  support@exemplo.com
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+// @host      localhost:8080
+// @BasePath  /
 func main() {
 	err := godotenv.Load()
 	if err != nil {
@@ -49,7 +61,7 @@ func main() {
 		log.Fatalf("ERRO: Falha ao carregar configuração da AWS: %v", err)
 	}
 
-	natsURL := os.Getenv("NATS_URL") // Adicione NATS_URL=nats://nats:4222 ao seu .env
+	natsURL := os.Getenv("NATS_URL")
 	nc, err := messaging.ConnectNATS(natsURL)
 	if err != nil {
 		log.Fatalf("ERRO: Falha ao conectar ao NATS: %v", err)
@@ -81,11 +93,15 @@ func main() {
 
 	api := handlers.NewAPI(db, photoAnalyzer, js)
 
-	http.HandleFunc("/telemetry/gyroscope", api.HandleGyroscope)
-	http.HandleFunc("/telemetry/gps", api.HandleGPS)
-	http.HandleFunc("/telemetry/photo", api.HandlePhoto)
+	router := http.NewServeMux()
+
+	api.RegisterRoutes(router)
+
+	router.HandleFunc("/swagger/", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+	))
 
 	log.Println("Servidor iniciado e escutando na porta :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", router))
 
 }

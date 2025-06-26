@@ -81,18 +81,26 @@ func TestHandlePhoto_Async(t *testing.T) {
 		mockJS := new(MockNATSJetStream)
 		api := NewAPI(nil, nil, mockJS)
 
-		testData := models.PhotoData{
-			DeviceID:   "photo-test-async",
-			Photo:      "aW1hZ2VtLWRhdGE=",
-			Timestamp:  time.Now(),
-			Recognized: false,
+		requestData := models.PhotoRequest{
+			DeviceID:  "photo-test-async",
+			Photo:     "aW1hZ2VtLWRhdGE=",
+			Timestamp: time.Now(),
 		}
-		payloadBytes, err := json.Marshal(testData)
+		requestPayloadBytes, err := json.Marshal(requestData)
 		require.NoError(t, err)
 
-		mockJS.On("Publish", "telemetry.photo", payloadBytes).Return(&nats.PubAck{}, nil)
+		expectedMessageData := models.PhotoData{
+			DeviceID:   requestData.DeviceID,
+			Photo:      requestData.Photo,
+			Timestamp:  requestData.Timestamp,
+			Recognized: false,
+		}
+		expectedMessageBytes, err := json.Marshal(expectedMessageData)
+		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodPost, "/telemetry/photo", bytes.NewBuffer(payloadBytes))
+		mockJS.On("Publish", "telemetry.photo", expectedMessageBytes).Return(&nats.PubAck{}, nil)
+
+		req := httptest.NewRequest(http.MethodPost, "/telemetry/photo", bytes.NewBuffer(requestPayloadBytes))
 		rr := httptest.NewRecorder()
 		api.HandlePhoto(rr, req)
 
@@ -104,8 +112,8 @@ func TestHandlePhoto_Async(t *testing.T) {
 		mockJS := new(MockNATSJetStream)
 		api := NewAPI(nil, nil, mockJS)
 
-		testData := models.PhotoData{DeviceID: "photo-test-invalid"}
-		payloadBytes, err := json.Marshal(testData)
+		requestData := models.PhotoRequest{DeviceID: "photo-test-invalid"} // Faltam campos
+		payloadBytes, err := json.Marshal(requestData)
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodPost, "/telemetry/photo", bytes.NewBuffer(payloadBytes))
@@ -113,6 +121,6 @@ func TestHandlePhoto_Async(t *testing.T) {
 		api.HandlePhoto(rr, req)
 
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		mockJS.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+		mockJS.AssertNotCalled(t, "Publish", mock.Anything)
 	})
 }

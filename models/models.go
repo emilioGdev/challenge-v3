@@ -55,6 +55,12 @@ func (gps *GPSData) Validate() error {
 	return nil
 }
 
+type PhotoRequest struct {
+	DeviceID  string    `json:"device_id"`
+	Photo     string    `json:"photo"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 type PhotoData struct {
 	DeviceID   string    `json:"device_id"`
 	Photo      string    `json:"photo"`
