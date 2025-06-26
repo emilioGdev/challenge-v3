@@ -55,7 +55,8 @@ func (s *PostgresStorage) InitTables() error {
 		id SERIAL PRIMARY KEY,
 		device_id TEXT NOT NULL,
 		photo TEXT NOT NULL,
-		timestamp TIMESTAMP NOT NULL
+		timestamp TIMESTAMP NOT NULL,
+		recognized BOOLEAN NOT NULL DEFAULT FALSE
 	);`
 
 	tables := []string{gyroscopeTable, gpsTable, photoTable}
@@ -81,7 +82,7 @@ func (s *PostgresStorage) SaveGPS(data *models.GPSData) error {
 }
 
 func (s *PostgresStorage) SavePhoto(data *models.PhotoData) error {
-	query := "INSERT INTO photo(device_id, photo, timestamp) VALUES($1, $2, $3)"
-	_, err := s.db.Exec(query, data.DeviceID, data.Photo, data.Timestamp)
+	query := "INSERT INTO photo(device_id, photo, timestamp, recognized) VALUES($1, $2, $3, $4)"
+	_, err := s.db.Exec(query, data.DeviceID, data.Photo, data.Timestamp, data.Recognized)
 	return err
 }

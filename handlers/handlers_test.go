@@ -3,7 +3,9 @@ package handlers
 import (
 	"bytes"
 	"challenge-v3/models"
+	"challenge-v3/services"
 	"challenge-v3/storage"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -11,6 +13,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/rekognition"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -44,7 +48,19 @@ func setupTestAPI(t *testing.T) (*API, *sql.DB) {
 	_, err = db.Exec("TRUNCATE TABLE gyroscope, gps, photo RESTART IDENTITY")
 	require.NoError(t, err, "Falha ao limpar tabelas")
 
-	return NewAPI(dbStorage), db
+	awsRegion := os.Getenv("AWS_REGION")
+	require.NotEmpty(t, awsRegion, "AWS_REGION não pode ser vazio para os testes")
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsRegion))
+	require.NoError(t, err, "Falha ao carregar configuração da AWS para o teste")
+
+	rekognitionClient := rekognition.NewFromConfig(cfg)
+	collectionID := os.Getenv("REKOGNITION_COLLECTION_ID")
+	require.NotEmpty(t, collectionID, "REKOGNITION_COLLECTION_ID não pode ser vazio para os testes")
+
+	photoAnalyzer := services.NewPhotoAnalyzerService(rekognitionClient, collectionID, dbStorage)
+
+	return NewAPI(dbStorage, photoAnalyzer), db
 }
 
 func TestHandleGyroscope_Integration(t *testing.T) {

@@ -2,13 +2,20 @@ package main
 
 import (
 	"challenge-v3/handlers"
+	"challenge-v3/services"
 	"challenge-v3/storage"
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/joho/godotenv" //
+	"github.com/joho/godotenv"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/rekognition"
+	"github.com/aws/aws-sdk-go-v2/service/rekognition/types"
 )
 
 func main() {
@@ -23,6 +30,10 @@ func main() {
 	dbHost := os.Getenv("DB_HOST")
 	dbPort := os.Getenv("DB_PORT")
 
+	log.Printf("DEBUG: DB_HOST lido: [%s]", dbHost)
+	log.Printf("DEBUG: DB_PORT lido: [%s]", dbPort)
+	log.Printf("DEBUG: DB_USER lido: [%s]", dbUser)
+
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		dbHost, dbPort, dbUser, dbPassword, dbName,
 	)
@@ -35,7 +46,31 @@ func main() {
 		log.Fatalf("ERRO: Não foi possível inicializar as tabelas: %v", err)
 	}
 
-	api := handlers.NewAPI(db)
+	awsRegion := os.Getenv("AWS_REGION")
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsRegion))
+	if err != nil {
+		log.Fatalf("ERRO: Falha ao carregar configuração da AWS: %v", err)
+	}
+
+	rekognitionClient := rekognition.NewFromConfig(cfg)
+	collectionID := os.Getenv("REKOGNITION_COLLECTION_ID")
+
+	_, err = rekognitionClient.CreateCollection(context.TODO(), &rekognition.CreateCollectionInput{CollectionId: &collectionID})
+
+	var resourceExistsErr *types.ResourceAlreadyExistsException
+	if err != nil {
+		if errors.As(err, &resourceExistsErr) {
+			log.Printf("AVISO: Coleção '%s' já existe. Continuando.\n", collectionID)
+		} else {
+			log.Fatalf("ERRO: Falha ao criar/verificar coleção no Rekognition: %v", err)
+		}
+	} else {
+		log.Printf("Coleção '%s' criada com sucesso.\n", collectionID)
+	}
+
+	photoAnalyzer := services.NewPhotoAnalyzerService(rekognitionClient, collectionID, db)
+
+	api := handlers.NewAPI(db, photoAnalyzer)
 
 	http.HandleFunc("/telemetry/gyroscope", api.HandleGyroscope)
 	http.HandleFunc("/telemetry/gps", api.HandleGPS)
@@ -43,4 +78,5 @@ func main() {
 
 	log.Println("Servidor iniciado e escutando na porta :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
+
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"challenge-v3/models"
+	"challenge-v3/services"
 	"challenge-v3/storage"
 	"encoding/json"
 	"log"
@@ -9,11 +10,15 @@ import (
 )
 
 type API struct {
-	db storage.Storage
+	db            storage.Storage
+	photoAnalyzer *services.PhotoAnalyzerService
 }
 
-func NewAPI(db storage.Storage) *API {
-	return &API{db: db}
+func NewAPI(db storage.Storage, pa *services.PhotoAnalyzerService) *API {
+	return &API{
+		db:            db,
+		photoAnalyzer: pa,
+	}
 }
 
 func SendJSONError(w http.ResponseWriter, message string, statusCode int) {
@@ -101,21 +106,26 @@ func (a *API) HandlePhoto(w http.ResponseWriter, r *http.Request) {
 
 	var data models.PhotoData
 	err := decoder.Decode(&data)
+
 	if err != nil {
-		log.Printf("ERRO: Falha ao decodificar JSON para foto: %v", err)
 		SendJSONError(w, "Corpo da requisição inválido: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	if err := data.Validate(); err != nil {
-		SendJSONError(w, err.Error(), http.StatusBadRequest)
+	if data.DeviceID == "" || data.Photo == "" || data.Timestamp.IsZero() {
+		SendJSONError(w, "Campos device_id, photo e timestamp são obrigatórios", http.StatusBadRequest)
 		return
 	}
 
-	if err := a.db.SavePhoto(&data); err != nil {
-		log.Printf("ERRO: Falha ao salvar dados de foto: %v", err)
-		SendJSONError(w, "Erro interno ao salvar os dados", http.StatusInternalServerError)
+	recognized, err := a.photoAnalyzer.AnalyzeAndSavePhoto(&data)
+	if err != nil {
+		SendJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	SendJSONSuccess(w, "Foto recebida e salva com sucesso!", http.StatusOK)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":    "Foto recebida, analisada e salva com sucesso!",
+		"recognized": recognized,
+	})
 }
