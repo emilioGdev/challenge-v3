@@ -33,8 +33,9 @@ func (m *MockNATSJetStream) Publish(subj string, data []byte, opts ...nats.PubOp
 func float64Ptr(f float64) *float64 { return &f }
 
 func TestAuthenticationMiddleware(t *testing.T) {
-	err := godotenv.Load("../.env")
-	require.NoError(t, err, "Falha ao carregar .env para o teste de middleware")
+	if err := godotenv.Load("../.env"); err != nil {
+		t.Log("Aviso: Arquivo .env não encontrado, usando variáveis de ambiente do sistema/CI.")
+	}
 
 	apiKey := os.Getenv("API_KEY")
 	require.NotEmpty(t, apiKey, "API_KEY não pode ser vazia no .env")
