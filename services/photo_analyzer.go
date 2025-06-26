@@ -8,7 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -44,19 +44,19 @@ func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool
 	if err := data.Validate(); err != nil {
 		return false, ierr.NewValidationError("dados da foto inválidos: %w", err)
 	}
-	log.Println("Iniciando análise da foto...")
+	slog.Info("Iniciando análise da foto")
 
 	imageBytes, err := base64.StdEncoding.DecodeString(data.Photo)
 	if err != nil {
-		log.Printf("ERRO: Falha ao decodificar imagem base64: %v\n", err)
+		slog.Error("Falha ao decodificar imagem base64", "error", err)
 		return false, fmt.Errorf("imagem base64 inválida")
 	}
 
 	cacheKey := fmt.Sprintf("%x", sha256.Sum256(imageBytes))
-	log.Printf("DEBUG: Chave de cache gerada para a imagem: %s", cacheKey)
+	slog.Debug("Chave de cache gerada para a imagem", "cache_key", cacheKey)
 
 	if recognized, found := s.cache.Get(cacheKey); found {
-		log.Printf("CACHE HIT: Imagem encontrada no cache. Reconhecida: %t\n", recognized.(bool))
+		slog.Info("Imagem encontrada no cache", "cache_hit", true, "recognized", recognized)
 		data.Recognized = recognized.(bool)
 		if err := s.db.SavePhoto(data); err != nil {
 			return false, err
@@ -64,7 +64,7 @@ func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool
 		return data.Recognized, nil
 	}
 
-	log.Println("CACHE MISS: Imagem não encontrada no cache. Prosseguindo para análise no Rekognition.")
+	slog.Info("Imagem não encontrada no cache, prosseguindo para análise no Rekognition", "cache_hit", false)
 
 	var recognized bool
 	searchResult, err := s.rekognitionClient.SearchFacesByImage(context.TODO(), &rekognition.SearchFacesByImageInput{
@@ -74,17 +74,19 @@ func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool
 		FaceMatchThreshold: aws.Float32(90.0),
 	})
 	if err != nil {
-		log.Printf("ERRO: Falha ao buscar face no Rekognition: %v\n", err)
+		slog.Error("Falha ao buscar face no Rekognition", "error", err)
 		return false, fmt.Errorf("erro ao analisar a imagem")
 	}
 
 	if len(searchResult.FaceMatches) > 0 {
 		recognized = true
 		match := searchResult.FaceMatches[0]
-		log.Printf("SUCESSO: Rosto reconhecido com similaridade de %f%%. FaceID: %s\n", *match.Similarity, *match.Face.FaceId)
+		slog.Info("Rosto reconhecido na coleção",
+			"similarity", *match.Similarity,
+			"face_id", *match.Face.FaceId)
 	} else {
 		recognized = false
-		log.Println("AVISO: Rosto não reconhecido na coleção. Tentando indexar novo rosto...")
+		slog.Warn("Rosto não reconhecido, tentando indexar novo rosto")
 		indexResult, err := s.rekognitionClient.IndexFaces(context.TODO(), &rekognition.IndexFacesInput{
 			CollectionId:        aws.String(s.collectionID),
 			Image:               &types.Image{Bytes: imageBytes},
@@ -92,14 +94,15 @@ func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool
 			DetectionAttributes: []types.Attribute{types.AttributeDefault},
 		})
 		if err != nil || len(indexResult.FaceRecords) == 0 {
-			log.Printf("ERRO: Falha ao indexar novo rosto: %v\n", err)
+			slog.Error("Falha ao indexar novo rosto", "error", err)
 		} else {
-			log.Printf("SUCESSO: Novo rosto indexado com sucesso. FaceID: %s\n", *indexResult.FaceRecords[0].Face.FaceId)
+			slog.Info("Novo rosto indexado com sucesso",
+				"face_id", *indexResult.FaceRecords[0].Face.FaceId)
 		}
 	}
 
 	if recognized {
-		log.Printf("CACHE SET: Salvando resultado 'true' no cache para a chave %s\n", cacheKey)
+		slog.Debug("Salvando resultado no cache", "cache_key", cacheKey, "recognized", true)
 		s.cache.Set(cacheKey, true, cache.DefaultExpiration)
 	}
 
@@ -108,6 +111,6 @@ func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool
 		return false, err
 	}
 
-	log.Println("Análise e salvamento da foto concluídos.")
+	slog.Info("Análise e salvamento da foto concluídos", "recognized", recognized)
 	return recognized, nil
 }

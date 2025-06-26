@@ -4,7 +4,7 @@ import (
 	"challenge-v3/models"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 
 	_ "github.com/lib/pq"
 )
@@ -65,7 +65,7 @@ func (s *PostgresStorage) InitTables() error {
 			return err
 		}
 	}
-	log.Println("Tabelas do banco de dados inicializadas com sucesso.")
+	slog.Info("Tabelas do banco de dados inicializadas com sucesso")
 	return nil
 }
 

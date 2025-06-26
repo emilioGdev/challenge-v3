@@ -1,7 +1,7 @@
 package messaging
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -12,7 +12,7 @@ func ConnectNATS(natsURL string) (*nats.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println("Conectado ao NATS em", natsURL)
+	slog.Info("Conectado ao NATS", "url", natsURL)
 	return nc, nil
 }
 
@@ -31,6 +31,6 @@ func SetupJetStream(nc *nats.Conn) (nats.JetStreamContext, error) {
 			return nil, err
 		}
 	}
-	log.Println("NATS JetStream configurado e pronto.")
+	slog.Info("JetStream configurado e pronto")
 	return js, nil
 }

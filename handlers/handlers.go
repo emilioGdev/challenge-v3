@@ -5,7 +5,7 @@ import (
 	"challenge-v3/services"
 	"challenge-v3/storage"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/nats-io/nats.go"
@@ -71,12 +71,12 @@ func (a *API) HandleGyroscope(w http.ResponseWriter, r *http.Request) {
 
 	_, err = a.natsJS.Publish("telemetry.gyroscope", msgData)
 	if err != nil {
-		log.Printf("ERRO: Falha ao publicar mensagem no NATS: %v", err)
+		slog.Error("Falha ao publicar mensagem no NATS", "topic", "telemetry.gyroscope", "error", err)
 		SendJSONError(w, "Erro interno ao enviar dados para processamento", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Mensagem para device %s publicada em 'telemetry.gyroscope'", data.DeviceID)
+	slog.Info("Mensagem publicada com sucesso", "topic", "telemetry.gps", "device_id", data.DeviceID)
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Dados de giroscópio recebidos e enfileirados."})
 }
@@ -115,12 +115,12 @@ func (a *API) HandleGPS(w http.ResponseWriter, r *http.Request) {
 
 	_, err = a.natsJS.Publish("telemetry.gps", msgData)
 	if err != nil {
-		log.Printf("ERRO: Falha ao publicar mensagem no NATS: %v", err)
+		slog.Error("Falha ao publicar mensagem no NATS", "topic", "telemetry.gps", "error", err)
 		SendJSONError(w, "Erro interno ao enviar dados para processamento", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Mensagem para device %s publicada em 'telemetry.gps'", data.DeviceID)
+	slog.Info("Mensagem publicada com sucesso", "topic", "telemetry.gps", "device_id", data.DeviceID)
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Dados de GPS recebidos e enfileirados."})
 }
@@ -166,12 +166,12 @@ func (a *API) HandlePhoto(w http.ResponseWriter, r *http.Request) {
 
 	_, err = a.natsJS.Publish("telemetry.photo", msgData)
 	if err != nil {
-		log.Printf("ERRO: Falha ao publicar mensagem no NATS: %v", err)
+		slog.Error("Falha ao publicar mensagem no NATS", "topic", "telemetry.photo", "error", err)
 		SendJSONError(w, "Erro interno ao enviar dados para processamento", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Mensagem para device %s publicada em 'telemetry.photo'", dataToPublish.DeviceID)
+	slog.Info("Mensagem publicada com sucesso", "topic", "telemetry.photo", "device_id", dataToPublish.DeviceID)
 
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Dados da foto recebidos e enfileirados para processamento."})
