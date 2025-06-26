@@ -1,6 +1,7 @@
 package services
 
 import (
+	"challenge-v3/ierr"
 	"challenge-v3/models"
 	"challenge-v3/storage"
 	"context"
@@ -16,14 +17,19 @@ import (
 	"github.com/patrickmn/go-cache"
 )
 
+type RekognitionClient interface {
+	SearchFacesByImage(ctx context.Context, params *rekognition.SearchFacesByImageInput, optFns ...func(*rekognition.Options)) (*rekognition.SearchFacesByImageOutput, error)
+	IndexFaces(ctx context.Context, params *rekognition.IndexFacesInput, optFns ...func(*rekognition.Options)) (*rekognition.IndexFacesOutput, error)
+}
+
 type PhotoAnalyzerService struct {
-	rekognitionClient *rekognition.Client
+	rekognitionClient RekognitionClient
 	collectionID      string
 	cache             *cache.Cache
 	db                storage.Storage
 }
 
-func NewPhotoAnalyzerService(rekClient *rekognition.Client, collID string, db storage.Storage) *PhotoAnalyzerService {
+func NewPhotoAnalyzerService(rekClient RekognitionClient, collID string, db storage.Storage) *PhotoAnalyzerService {
 	return &PhotoAnalyzerService{
 		rekognitionClient: rekClient,
 		collectionID:      collID,
@@ -33,6 +39,9 @@ func NewPhotoAnalyzerService(rekClient *rekognition.Client, collID string, db st
 }
 
 func (s *PhotoAnalyzerService) AnalyzeAndSavePhoto(data *models.PhotoData) (bool, error) {
+	if err := data.Validate(); err != nil {
+		return false, ierr.NewValidationError("dados da foto inválidos: %w", err)
+	}
 	log.Println("Iniciando análise da foto...")
 
 	imageBytes, err := base64.StdEncoding.DecodeString(data.Photo)

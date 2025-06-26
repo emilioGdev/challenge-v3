@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"challenge-v3/ierr"
 	"challenge-v3/models"
 	"challenge-v3/services"
 	"challenge-v3/storage"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 )
@@ -105,20 +107,20 @@ func (a *API) HandlePhoto(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 
 	var data models.PhotoData
-	err := decoder.Decode(&data)
-
-	if err != nil {
+	if err := decoder.Decode(&data); err != nil {
 		SendJSONError(w, "Corpo da requisição inválido: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	if data.DeviceID == "" || data.Photo == "" || data.Timestamp.IsZero() {
-		SendJSONError(w, "Campos device_id, photo e timestamp são obrigatórios", http.StatusBadRequest)
 		return
 	}
 
 	recognized, err := a.photoAnalyzer.AnalyzeAndSavePhoto(&data)
 	if err != nil {
-		SendJSONError(w, err.Error(), http.StatusInternalServerError)
+		var validationErr *ierr.ValidationError
+		if errors.As(err, &validationErr) {
+			SendJSONError(w, validationErr.Error(), http.StatusBadRequest)
+		} else {
+			log.Printf("ERRO INTERNO: %v", err)
+			SendJSONError(w, "erro interno ao processar a foto", http.StatusInternalServerError)
+		}
 		return
 	}
 
