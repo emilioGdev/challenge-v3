@@ -2,7 +2,9 @@ services:
   app:
     build: .
     container_name: challenge_app_api
-    ports: ["8080:8080"]
+    ports: 
+    - "8080:8080"
+    - "8081:8081"
     env_file: [.env]
     command: /app/api
     depends_on:
@@ -12,11 +14,28 @@ services:
   worker:
     build: .
     container_name: challenge_app_worker
+    ports:
+    - "8082:8082"
     env_file: [.env]
     command: /app/worker
     depends_on:
       - db
       - nats
+
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: challenge_prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+    command: --config.file=/etc/prometheus/prometheus.yml
+  
+  grafana:
+    image: grafana/grafana:9.5.3
+    container_name: challenge_grafana
+    ports: ["3000:3000"]
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
 
   nats:
     image: nats:2.10-alpine
