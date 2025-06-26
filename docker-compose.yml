@@ -29,6 +29,17 @@ services:
     volumes:
       - ./monitoring/prometheus:/etc/prometheus
     command: --config.file=/etc/prometheus/prometheus.yml
+    depends_on:
+    - app
+    - worker
+
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: challenge_alertmanager
+    ports: ["9093:9093"]
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager
+    command: --config.file=/etc/alertmanager/config.yml
   
   grafana:
     image: grafana/grafana:9.5.3
