@@ -17,6 +17,10 @@ import (
 	"github.com/patrickmn/go-cache"
 )
 
+type PhotoAnalyzer interface {
+	AnalyzeAndSavePhoto(data *models.PhotoData) (bool, error)
+}
+
 type RekognitionClient interface {
 	SearchFacesByImage(ctx context.Context, params *rekognition.SearchFacesByImageInput, optFns ...func(*rekognition.Options)) (*rekognition.SearchFacesByImageOutput, error)
 	IndexFaces(ctx context.Context, params *rekognition.IndexFacesInput, optFns ...func(*rekognition.Options)) (*rekognition.IndexFacesOutput, error)

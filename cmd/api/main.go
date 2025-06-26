@@ -2,6 +2,7 @@ package main
 
 import (
 	"challenge-v3/handlers"
+	"challenge-v3/messaging"
 	"challenge-v3/services"
 	"challenge-v3/storage"
 	"context"
@@ -30,10 +31,6 @@ func main() {
 	dbHost := os.Getenv("DB_HOST")
 	dbPort := os.Getenv("DB_PORT")
 
-	log.Printf("DEBUG: DB_HOST lido: [%s]", dbHost)
-	log.Printf("DEBUG: DB_PORT lido: [%s]", dbPort)
-	log.Printf("DEBUG: DB_USER lido: [%s]", dbUser)
-
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		dbHost, dbPort, dbUser, dbPassword, dbName,
 	)
@@ -50,6 +47,18 @@ func main() {
 	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsRegion))
 	if err != nil {
 		log.Fatalf("ERRO: Falha ao carregar configuração da AWS: %v", err)
+	}
+
+	natsURL := os.Getenv("NATS_URL") // Adicione NATS_URL=nats://nats:4222 ao seu .env
+	nc, err := messaging.ConnectNATS(natsURL)
+	if err != nil {
+		log.Fatalf("ERRO: Falha ao conectar ao NATS: %v", err)
+	}
+	defer nc.Close()
+
+	js, err := messaging.SetupJetStream(nc)
+	if err != nil {
+		log.Fatalf("ERRO: Falha ao configurar o JetStream: %v", err)
 	}
 
 	rekognitionClient := rekognition.NewFromConfig(cfg)
@@ -70,7 +79,7 @@ func main() {
 
 	photoAnalyzer := services.NewPhotoAnalyzerService(rekognitionClient, collectionID, db)
 
-	api := handlers.NewAPI(db, photoAnalyzer)
+	api := handlers.NewAPI(db, photoAnalyzer, js)
 
 	http.HandleFunc("/telemetry/gyroscope", api.HandleGyroscope)
 	http.HandleFunc("/telemetry/gps", api.HandleGPS)

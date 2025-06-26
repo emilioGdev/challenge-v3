@@ -1,14 +1,29 @@
 services:
-
   app:
-    build: . 
-    container_name: challenge_app
-    ports:
-      - "8080:8080" 
-    env_file:
-      - .env 
+    build: .
+    container_name: challenge_app_api
+    ports: ["8080:8080"]
+    env_file: [.env]
+    command: /app/api
     depends_on:
-      - db 
+      - db
+      - nats
+
+  worker:
+    build: .
+    container_name: challenge_app_worker
+    env_file: [.env]
+    command: /app/worker
+    depends_on:
+      - db
+      - nats
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: challenge_nats
+    ports: ["4222:4222", "8222:8222"]
+    command: "-js"
+
   db:
     image: postgres:15
     container_name: challenge_db_postgres
