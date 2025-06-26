@@ -4,11 +4,15 @@ import (
 	"challenge-v3/ierr"
 	"challenge-v3/models"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/rekognition"
 	"github.com/aws/aws-sdk-go-v2/service/rekognition/types"
+	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -17,10 +21,16 @@ type MockRekognitionClient struct{ mock.Mock }
 
 func (m *MockRekognitionClient) SearchFacesByImage(ctx context.Context, params *rekognition.SearchFacesByImageInput, optFns ...func(*rekognition.Options)) (*rekognition.SearchFacesByImageOutput, error) {
 	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).(*rekognition.SearchFacesByImageOutput), args.Error(1)
 }
 func (m *MockRekognitionClient) IndexFaces(ctx context.Context, params *rekognition.IndexFacesInput, optFns ...func(*rekognition.Options)) (*rekognition.IndexFacesOutput, error) {
 	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).(*rekognition.IndexFacesOutput), args.Error(1)
 }
 
@@ -33,7 +43,7 @@ func (m *MockStorage) SaveGPS(data *models.GPSData) error             { return m
 func validTestPhoto() models.PhotoData {
 	return models.PhotoData{
 		DeviceID:  "test-device",
-		Photo:     "dGVzdA==",
+		Photo:     "aW1hZ2VtLWRhdGE=",
 		Timestamp: time.Now(),
 	}
 }
@@ -49,7 +59,7 @@ func TestPhotoAnalyzer_FaceRecognized(t *testing.T) {
 		FaceMatches: []types.FaceMatch{{Face: &types.Face{FaceId: &faceID}, Similarity: &similarity}},
 	}
 	mockRek.On("SearchFacesByImage", mock.Anything, mock.Anything).Return(searchOutput, nil)
-	mockDB.On("SavePhoto", mock.MatchedBy(func(p *models.PhotoData) bool { return p.Recognized })).Return(nil)
+	mockDB.On("SavePhoto", mock.Anything).Return(nil)
 
 	recognized, err := photoAnalyzer.AnalyzeAndSavePhoto(&testPhoto)
 
@@ -57,6 +67,12 @@ func TestPhotoAnalyzer_FaceRecognized(t *testing.T) {
 	assert.True(t, recognized)
 	mockRek.AssertExpectations(t)
 	mockDB.AssertExpectations(t)
+
+	imageBytes, _ := base64.StdEncoding.DecodeString(testPhoto.Photo)
+	cacheKey := fmt.Sprintf("%x", sha256.Sum256(imageBytes))
+	cachedResult, found := photoAnalyzer.cache.Get(cacheKey)
+	assert.True(t, found, "O resultado 'true' deveria ter sido salvo no cache")
+	assert.Equal(t, true, cachedResult)
 }
 
 func TestPhotoAnalyzer_FaceNotRecognized_AndIndexed(t *testing.T) {
@@ -64,12 +80,12 @@ func TestPhotoAnalyzer_FaceNotRecognized_AndIndexed(t *testing.T) {
 	mockDB := new(MockStorage)
 	photoAnalyzer := NewPhotoAnalyzerService(mockRek, "test-collection", mockDB)
 	testPhoto := validTestPhoto()
-	mockRek.On("SearchFacesByImage", mock.Anything, mock.Anything).Return(&rekognition.SearchFacesByImageOutput{}, nil)
 
+	mockRek.On("SearchFacesByImage", mock.Anything, mock.Anything).Return(&rekognition.SearchFacesByImageOutput{}, nil)
 	faceID := "new-face-id"
 	indexOutput := &rekognition.IndexFacesOutput{FaceRecords: []types.FaceRecord{{Face: &types.Face{FaceId: &faceID}}}}
 	mockRek.On("IndexFaces", mock.Anything, mock.Anything).Return(indexOutput, nil)
-	mockDB.On("SavePhoto", mock.MatchedBy(func(p *models.PhotoData) bool { return !p.Recognized })).Return(nil)
+	mockDB.On("SavePhoto", mock.Anything).Return(nil)
 
 	recognized, err := photoAnalyzer.AnalyzeAndSavePhoto(&testPhoto)
 
@@ -77,6 +93,32 @@ func TestPhotoAnalyzer_FaceNotRecognized_AndIndexed(t *testing.T) {
 	assert.False(t, recognized)
 	mockRek.AssertExpectations(t)
 	mockDB.AssertExpectations(t)
+
+	imageBytes, _ := base64.StdEncoding.DecodeString(testPhoto.Photo)
+	cacheKey := fmt.Sprintf("%x", sha256.Sum256(imageBytes))
+	_, found := photoAnalyzer.cache.Get(cacheKey)
+	assert.False(t, found, "Um resultado 'false' não deveria ser salvo no cache")
+}
+
+func TestPhotoAnalyzer_CacheHit(t *testing.T) {
+	mockRek := new(MockRekognitionClient)
+	mockDB := new(MockStorage)
+	photoAnalyzer := NewPhotoAnalyzerService(mockRek, "test-collection", mockDB)
+	testPhoto := validTestPhoto()
+
+	imageBytes, _ := base64.StdEncoding.DecodeString(testPhoto.Photo)
+	cacheKey := fmt.Sprintf("%x", sha256.Sum256(imageBytes))
+	photoAnalyzer.cache.Set(cacheKey, true, cache.DefaultExpiration)
+
+	mockDB.On("SavePhoto", mock.Anything).Return(nil)
+
+	recognized, err := photoAnalyzer.AnalyzeAndSavePhoto(&testPhoto)
+
+	assert.NoError(t, err)
+	assert.True(t, recognized)
+	mockDB.AssertExpectations(t)
+	mockRek.AssertNotCalled(t, "SearchFacesByImage", mock.Anything, mock.Anything)
+	mockRek.AssertNotCalled(t, "IndexFaces", mock.Anything, mock.Anything)
 }
 
 func TestPhotoAnalyzer_ValidationFail(t *testing.T) {
