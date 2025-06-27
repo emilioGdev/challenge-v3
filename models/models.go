@@ -68,6 +68,12 @@ type PhotoData struct {
 	Recognized bool      `json:"recognized"`
 }
 
+type AuditEvent struct {
+	Actor   string                 `json:"actor"`
+	Action  string                 `json:"action"`
+	Details map[string]interface{} `json:"details"`
+}
+
 func (p *PhotoData) Validate() error {
 	if p.DeviceID == "" {
 		return errors.New("campo obrigatório ausente: device_id")

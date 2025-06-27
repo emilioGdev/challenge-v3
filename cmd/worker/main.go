@@ -48,6 +48,20 @@ func (w *Worker) handleGyroscopeMsg(msg *nats.Msg) {
 		return
 	}
 	slog.Info("mensagem de giroscópio processada", "device_id", data.DeviceID)
+
+	auditEvent := models.AuditEvent{
+		Actor:  data.DeviceID,
+		Action: "GYROSCOPE_PROCESSED",
+		Details: map[string]interface{}{
+			"x": *data.X,
+			"y": *data.Y,
+			"z": *data.Z,
+		},
+	}
+	if err := w.db.LogAuditEvent(auditEvent); err != nil {
+		slog.Error("falha ao registrar evento de auditoria para giroscópio", "error", err, "device_id", data.DeviceID)
+	}
+
 	msg.Ack()
 	metrics.NatsMessagesProcessed.WithLabelValues(subject, "success").Inc()
 }
@@ -67,6 +81,17 @@ func (w *Worker) handleGpsMsg(msg *nats.Msg) {
 		return
 	}
 	slog.Info("mensagem de gps processada", "device_id", data.DeviceID)
+	auditEvent := models.AuditEvent{
+		Actor:  data.DeviceID,
+		Action: "GPS_DATA_PROCESSED",
+		Details: map[string]interface{}{
+			"latitude":  *data.Latitude,
+			"longitude": *data.Longitude,
+		},
+	}
+	if err := w.db.LogAuditEvent(auditEvent); err != nil {
+		slog.Error("falha ao registrar evento de auditoria para gps", "error", err, "device_id", data.DeviceID)
+	}
 	msg.Ack()
 	metrics.NatsMessagesProcessed.WithLabelValues(subject, "success").Inc()
 }
@@ -94,6 +119,14 @@ func (w *Worker) handlePhotoMsg(msg *nats.Msg) {
 		return
 	}
 	slog.Info("mensagem de foto processada com sucesso", "device_id", data.DeviceID)
+	auditEvent := models.AuditEvent{
+		Actor:   data.DeviceID,
+		Action:  "PHOTO_PROCESSED",
+		Details: map[string]interface{}{"recognized": data.Recognized},
+	}
+	if err := w.db.LogAuditEvent(auditEvent); err != nil {
+		slog.Error("falha ao registrar evento de auditoria no worker", "error", err)
+	}
 	msg.Ack()
 	metrics.NatsMessagesProcessed.WithLabelValues(subject, "success").Inc()
 }

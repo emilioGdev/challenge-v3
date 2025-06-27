@@ -43,6 +43,10 @@ type MockStorage struct{ mock.Mock }
 func (m *MockStorage) SavePhoto(data *models.PhotoData) error         { return m.Called(data).Error(0) }
 func (m *MockStorage) SaveGyroscope(data *models.GyroscopeData) error { return m.Called(data).Error(0) }
 func (m *MockStorage) SaveGPS(data *models.GPSData) error             { return m.Called(data).Error(0) }
+func (m *MockStorage) LogAuditEvent(event models.AuditEvent) error {
+	args := m.Called(event)
+	return args.Error(0)
+}
 
 func validTestPhoto() models.PhotoData {
 	return models.PhotoData{

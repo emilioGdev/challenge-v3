@@ -3,6 +3,7 @@ package storage
 import (
 	"challenge-v3/models"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -13,6 +14,7 @@ type Storage interface {
 	SaveGyroscope(data *models.GyroscopeData) error
 	SaveGPS(data *models.GPSData) error
 	SavePhoto(data *models.PhotoData) error
+	LogAuditEvent(event models.AuditEvent) error
 }
 
 type PostgresStorage struct {
@@ -59,7 +61,16 @@ func (s *PostgresStorage) InitTables() error {
 		recognized BOOLEAN NOT NULL DEFAULT FALSE
 	);`
 
-	tables := []string{gyroscopeTable, gpsTable, photoTable}
+	auditTable := `
+    CREATE TABLE IF NOT EXISTS audit_log (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        actor TEXT NOT NULL,
+        action TEXT NOT NULL,
+        details JSONB
+    );`
+
+	tables := []string{gyroscopeTable, gpsTable, photoTable, auditTable}
 	for _, tableSQL := range tables {
 		if _, err := s.db.Exec(tableSQL); err != nil {
 			return err
@@ -67,6 +78,18 @@ func (s *PostgresStorage) InitTables() error {
 	}
 	slog.Info("Tabelas do banco de dados inicializadas com sucesso")
 	return nil
+}
+
+func (s *PostgresStorage) LogAuditEvent(event models.AuditEvent) error {
+	query := "INSERT INTO audit_log(actor, action, details) VALUES($1, $2, $3)"
+
+	detailsJSON, err := json.Marshal(event.Details)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(query, event.Actor, event.Action, detailsJSON)
+	return err
 }
 
 func (s *PostgresStorage) SaveGyroscope(data *models.GyroscopeData) error {
