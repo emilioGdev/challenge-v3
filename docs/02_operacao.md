@@ -1,7 +1,7 @@
 # Guia de Operação e Manutenção
 
 **Projeto:** Solução de Telemetria de Frota (MVP)  
-**Versão:** 1.0 (Arquitetura com Filas - Nível 5)
+**Versão:** Final - Nível 7
 
 ---
 
@@ -13,6 +13,8 @@ Certifique-se de ter o seguinte software instalado:
 - **Go:** Versão 1.24 ou superior  
 - **Docker:** Containerização  
 - **Docker Compose:** Orquestração dos containers
+- **Swag CLI::** Ferramenta para gerar a documentação da API
+
 
 ---
 
@@ -23,6 +25,12 @@ Certifique-se de ter o seguinte software instalado:
 ```bash
 git clone <URL_DO_SEU_REPOSITORIO>
 cd challenge-v3
+```
+
+### Instalar ferramentas Go
+
+```bash
+go install github.com/swaggo/swag/cmd/swag@latest
 ```
 
 ### Configurar variáveis de ambiente
@@ -50,6 +58,14 @@ AWS_ACCESS_KEY_ID=SUA_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY=SUA_SECRET_ACCESS_KEY
 AWS_REGION=us-east-1
 REKOGNITION_COLLECTION_ID=fleet_drivers
+API_KEY=chave-super-secreta-do-desafio-cloud-12345
+ENCRYPTION_KEY=este-e-um-segredo-de-32-bytes!!
+```
+
+### Gerar documentação da API
+
+```bash
+swag init -g cmd/api/main.go
 ```
 
 ### Instalar dependências Go
@@ -108,6 +124,15 @@ docker-compose run --rm app go test ./...
 
 ## 5. Manutenção e Verificação
 
+### Pontos de Acesso
+
+- **API Principal:** [http://localhost:8080](http://localhost:8080)  
+- **Swagger UI:** [http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)  
+- **Painel NATS:** [http://localhost:8222](http://localhost:8222)  
+- **Prometheus:** [http://localhost:9090](http://localhost:9090)  
+- **Alertmanager:** [http://localhost:9093](http://localhost:9093)  
+- **Grafana:** [http://localhost:3000](http://localhost:3000) (Login: `admin` / `admin`)
+
 ### Acessar o banco de dados
 
 ```bash
@@ -128,6 +153,12 @@ Acesse o painel web do NATS:
 ---
 
 ## 6. Atualização da Aplicação
+
+### Atualizar Swagger (se necessário)
+
+```bash
+swag init -g cmd/api/main.go
+```
 
 ```bash
 git pull origin main

@@ -1,7 +1,7 @@
 # Procedimentos de Backup e Recuperação
 
 **Projeto:** Solução de Telemetria de Frota (MVP)  
-**Versão:** 1.0  
+**Versão:** Final - Nível 7 Completo
 
 ---
 
@@ -18,6 +18,12 @@ Este documento descreve os procedimentos padrão para realizar o backup e a recu
 - **Descrição:** Contém todos os dados históricos de telemetria (giroscópio, GPS, fotos) e os resultados da análise de reconhecimento.  
 - **Componente:** Container Docker `challenge_db_postgres`  
 - **Estratégia:** Backup lógico diário utilizando `pg_dump`
+
+### Chave de Criptografia (`ENCRYPTION_KEY`)
+
+- **Descrição:** Chave secreta de 32 bytes usada para criptografar e decriptar fotos.  
+- **Componente:** Variável de ambiente no `.env` ou gerenciada como Secret em produção.  
+- **Estratégia:** Armazenar em cofre de segredos seguro
 
 ### Coleção AWS Rekognition
 
@@ -44,6 +50,8 @@ docker-compose exec -T db pg_dump -U challengeuser telemetry_db > backup_$(date 
 - `exec -T`: necessário para redirecionar corretamente  
 - `db`: nome do serviço no `docker-compose.yml`  
 - `> backup_...sql`: cria o arquivo de backup localmente
+- `challengeuser`: usuário do banco definido no `.env`
+- `telemetry_db`: nome do banco de dados
 
 ### Armazenamento Seguro
 
@@ -58,30 +66,30 @@ docker-compose exec -T db pg_dump -U challengeuser telemetry_db > backup_$(date 
 
 - `psql` (cliente do PostgreSQL)
 
-### Passos
+### Etapas
 
-1. **Preparar ambiente**
+1. **Configurar ENCRYPTION_KEY**
 
-Garanta que um container limpo esteja ativo:
+Garanta que a variável `ENCRYPTION_KEY` seja exatamente a mesma usada no backup original.
+
+2. **Preparar o ambiente**
 
 ```bash
 docker-compose down -v
 docker-compose up -d db
 ```
 
-2. **Executar restore**
+3. **Executar restauração**
 
 ```bash
 cat backup_2025-06-26_12-30-00.sql | docker-compose exec -T db psql -U challengeuser -d telemetry_db
 ```
 
-3. **Verificar restauração**
-
-Conecte-se ao banco e use SQL:
+4. **Verificar a restauração**
 
 ```sql
 SELECT COUNT(*) FROM photo;
-SELECT * FROM gps LIMIT 10;
+SELECT COUNT(*) FROM audit_log;
 ```
 
 ---
@@ -90,8 +98,9 @@ SELECT * FROM gps LIMIT 10;
 
 ### Rekognition: Recuperação da Coleção
 
-Caso a coleção de rostos seja apagada:
+Caso a coleção do Rekognition seja apagada:
 
-- Leia a tabela `photo` do banco restaurado  
-- Use a API `IndexFaces` do Rekognition para reenviar as imagens  
-- Assim, a coleção pode ser repopulada automaticamente via script
+1. Ler os registros da tabela `photo`  
+2. Usar `ENCRYPTION_KEY` para decriptar as imagens  
+3. Reenviar para a API `IndexFaces`  
+4. Populando novamente a coleção na AWS

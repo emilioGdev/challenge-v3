@@ -6,7 +6,7 @@
 - **Container:** `challenge_app_api`  
 - **Tecnologia:** Go (`golang:1.24-alpine`)  
 - **Responsabilidade:**  
-  É o ponto de entrada (gateway) para todos os dados de telemetria. Sua única função é receber as requisições HTTP, realizar uma validação rápida do payload, publicar a mensagem na fila NATS e retornar uma resposta HTTP `202 Accepted` o mais rápido possível. Ele é projetado para ser leve, rápido e stateless (não guarda estado).  
+  É o ponto de entrada (gateway) para todos os dados de telemetria. Sua responsabilidade principal é receber as requisições HTTP e publicá-las na fila NATS o mais rápido possível. Além disso, atua como a primeira linha de defesa do sistema, aplicando uma cadeia de middlewares a todas as requisições de telemetria para garantir Autenticação (via X-API-Key), Rate Limiting (por IP) e a coleta de Métricas (para o Prometheus).  
 
 - **Endpoints:**  
   - `POST /telemetry/gyroscope`  
@@ -24,9 +24,11 @@
 - **Container:** `challenge_app_worker`  
 - **Tecnologia:** Go (`golang:1.24-alpine`)  
 - **Responsabilidade:**  
-  Realiza o processamento pesado e assíncrono das mensagens. Ele se inscreve nos tópicos do NATS, consome as mensagens uma a uma e executa a lógica de negócio principal.  
+  Realiza o processamento pesado e assíncrono das mensagens. Ele se inscreve nos tópicos do NATS, consome as mensagens uma a uma e executa a lógica de negócio principal.
 
-  Para mensagens de foto, ele interage com o AWS Rekognition, gerencia um cache em memória e, por fim, persiste os dados no banco.  
+  Para mensagens de foto, ele interage com o AWS Rekognition e gerencia um cache em memória. Antes de persistir os dados, ele criptografa o dado da foto (usando AES-GCM) para garantir a segurança em repouso.
+
+  Para todos os tipos de telemetria, o worker registra um evento de auditoria no banco de dados após cada processamento bem-sucedido.
 
 - **Comunicação:**  
   Consome mensagens do serviço NATS, envia requisições para a API externa AWS Rekognition e escreve no serviço DB (PostgreSQL).
@@ -55,7 +57,7 @@
   Armazenamento persistente e relacional de todos os dados de telemetria que foram processados com sucesso pelo Worker.  
 
 - **Schema:**  
-  Contém 3 tabelas principais: `gyroscope`, `gps` e `photo`, cada uma com as colunas correspondentes aos dados coletados.
+  Contém 4 tabelas principais: `gyroscope`, `gps`, `photo` e `audit_log` para registrar as operações do sistema. Cada tabela possui colunas bem definidas para garantir a consistência dos dados.
 
 ---
 
@@ -81,5 +83,7 @@ O código-fonte está organizado nos seguintes pacotes principais:
 - `services/`: Contém a lógica de negócio principal (ex: `PhotoAnalyzerService`)  
 - `storage/`: Camada de acesso a dados, responsável pela comunicação com o banco de dados  
 - `models/`: Definição das estruturas de dados (`structs`) e suas validações  
-- `messaging/`: Funções auxiliares para conexão e configuração do NATS  
+- `messaging/`: Funções auxiliares para conexão e configuração do NATS
+- `metrics/`: Definição e exposição das métricas para o Prometheus
+- `crypto/`: Definição e exposição das métricas para o Prometheus.  
 - `ierr/`: Definição de tipos de erro personalizados

@@ -110,3 +110,34 @@ docker builder prune -a -f
 
 docker-compose up --build
 ```
+
+## Problema 6: API retorna erro 401 Unauthorized
+
+**Sintoma:**  
+Ao enviar uma requisição para um endpoint de telemetria, a resposta é `401 Unauthorized`.
+
+**Causa Provável:**  
+A Chave de API (API Key) está faltando ou está incorreta.
+
+**Soluções:**
+
+- Verifique se sua requisição (ex: Postman) inclui o cabeçalho HTTP `X-API-Key`.
+- Confirme que o valor enviado nesse cabeçalho é exatamente o mesmo definido na variável `API_KEY` do seu arquivo `.env`.
+
+---
+
+## Problema 7: API retorna erro 429 Too Many Requests
+
+**Sintoma:**  
+Após enviar várias requisições rapidamente, a API começa a responder com `429 Too Many Requests`.
+
+**Causa Provável:**  
+O Rate Limiter foi ativado e o endereço IP excedeu o limite de requisições por segundo.
+
+**Soluções:**
+
+- Esse é o comportamento esperado. A API está se protegendo contra abuso.
+- Espere um ou dois segundos para o "balde de fichas" do seu IP ser reabastecido e tente novamente.
+- Para desativar temporariamente durante testes de carga, comente a linha do `RateLimiterMiddleware` no `cmd/api/main.go`.
+
+---
