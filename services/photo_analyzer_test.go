@@ -1,20 +1,24 @@
 package services
 
 import (
+	"challenge-v3/crypto"
 	"challenge-v3/ierr"
 	"challenge-v3/models"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/rekognition"
 	"github.com/aws/aws-sdk-go-v2/service/rekognition/types"
+	"github.com/joho/godotenv"
 	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type MockRekognitionClient struct{ mock.Mock }
@@ -49,17 +53,37 @@ func validTestPhoto() models.PhotoData {
 }
 
 func TestPhotoAnalyzer_FaceRecognized(t *testing.T) {
+	if err := godotenv.Load("../.env"); err != nil {
+		t.Log("Aviso: Arquivo .env não encontrado, usando variáveis de ambiente do sistema/CI.")
+	}
+	encryptionKey := []byte(os.Getenv("ENCRYPTION_KEY"))
+	require.Len(t, encryptionKey, 32, "A chave de criptografia deve ter 32 bytes")
+
 	mockRek := new(MockRekognitionClient)
 	mockDB := new(MockStorage)
 	photoAnalyzer := NewPhotoAnalyzerService(mockRek, "test-collection", mockDB)
 	testPhoto := validTestPhoto()
+	originalPhotoB64 := testPhoto.Photo
 
 	faceID, similarity := "test-face-id", float32(99.9)
 	searchOutput := &rekognition.SearchFacesByImageOutput{
 		FaceMatches: []types.FaceMatch{{Face: &types.Face{FaceId: &faceID}, Similarity: &similarity}},
 	}
 	mockRek.On("SearchFacesByImage", mock.Anything, mock.Anything).Return(searchOutput, nil)
-	mockDB.On("SavePhoto", mock.Anything).Return(nil)
+	mockDB.On("SavePhoto", mock.MatchedBy(func(p *models.PhotoData) bool {
+		if !p.Recognized {
+			return false
+		}
+		if p.Photo == originalPhotoB64 {
+			return false
+		}
+		encryptedBytes, _ := base64.StdEncoding.DecodeString(p.Photo)
+		decryptedBytes, err := crypto.Decrypt(encryptedBytes, encryptionKey)
+		if err != nil {
+			return false
+		}
+		return string(decryptedBytes) == originalPhotoB64
+	})).Return(nil)
 
 	recognized, err := photoAnalyzer.AnalyzeAndSavePhoto(&testPhoto)
 
@@ -68,7 +92,7 @@ func TestPhotoAnalyzer_FaceRecognized(t *testing.T) {
 	mockRek.AssertExpectations(t)
 	mockDB.AssertExpectations(t)
 
-	imageBytes, _ := base64.StdEncoding.DecodeString(testPhoto.Photo)
+	imageBytes, _ := base64.StdEncoding.DecodeString(originalPhotoB64)
 	cacheKey := fmt.Sprintf("%x", sha256.Sum256(imageBytes))
 	cachedResult, found := photoAnalyzer.cache.Get(cacheKey)
 	assert.True(t, found, "O resultado 'true' deveria ter sido salvo no cache")
