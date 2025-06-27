@@ -6,10 +6,13 @@ import (
 	"challenge-v3/storage"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/nats-io/nats.go"
+	"golang.org/x/time/rate"
 )
 
 type API struct {
@@ -30,6 +33,35 @@ func SendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(models.ErrorResponse{Message: message})
+}
+
+var clients = make(map[string]*rate.Limiter)
+var mu sync.Mutex
+
+func RateLimiterMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			SendJSONError(w, "Erro ao obter endereço de IP", http.StatusInternalServerError)
+			return
+		}
+
+		mu.Lock()
+
+		if _, found := clients[ip]; !found {
+			clients[ip] = rate.NewLimiter(rate.Limit(5), 10)
+		}
+
+		limiter := clients[ip]
+		mu.Unlock()
+
+		if !limiter.Allow() {
+			SendJSONError(w, "Você atingiu o limite de requisições", http.StatusTooManyRequests)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func AuthenticationMiddleware(next http.Handler) http.Handler {
